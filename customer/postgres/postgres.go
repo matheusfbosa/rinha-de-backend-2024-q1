@@ -1,8 +1,10 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lib/pq"
 	"github.com/matheusfbosa/rinha-de-backend-2024-q1/customer"
 )
@@ -10,12 +12,12 @@ import (
 const foreignKeyViolationCode = "23503"
 
 type PostgreSQL struct {
-	db *sql.DB
+	dbpool *pgxpool.Pool
 }
 
-func NewPostgreSQL(db *sql.DB) *PostgreSQL {
+func NewPostgreSQL(dbpool *pgxpool.Pool) *PostgreSQL {
 	return &PostgreSQL{
-		db: db,
+		dbpool: dbpool,
 	}
 }
 
@@ -29,7 +31,8 @@ func (r *PostgreSQL) CreateTransaction(tr *customer.Transaction) error {
 			last_balance
 		) VALUES ($1, $2, $3, $4, $5)
 	`
-	_, err := r.db.Exec(query,
+	_, err := r.dbpool.Exec(context.Background(),
+		query,
 		tr.Type,
 		tr.Value,
 		tr.Description,
@@ -64,8 +67,8 @@ func (r *PostgreSQL) GetBankStatement(customerID string) (*customer.BankStatemen
 func (r *PostgreSQL) GetAccountBalance(customerID string) (*customer.BalanceBankStatement, error) {
 	query := `
 		SELECT
-			COALESCE(t.last_balance, 0) AS last_balance,
-			c.account_limit,
+			COALESCE(t.last_balance, 0) AS total,
+			c.account_limit AS limit,
 			NOW() AS date
 		FROM customers c
 		LEFT JOIN (
@@ -78,7 +81,8 @@ func (r *PostgreSQL) GetAccountBalance(customerID string) (*customer.BalanceBank
 		WHERE c.customer_id = $1 AND c.customer_id IS NOT NULL;
 	`
 	var ab customer.BalanceBankStatement
-	err := r.db.QueryRow(query, customerID).Scan(&ab.Total, &ab.Limit, &ab.Date)
+	err := r.dbpool.QueryRow(context.Background(), query, customerID).
+		Scan(&ab.Total, &ab.Limit, &ab.Date)
 	if err == sql.ErrNoRows {
 		return nil, customer.ErrCustomerNotFound
 	}
@@ -100,7 +104,7 @@ func (r *PostgreSQL) getLastTransactions(customerID string) ([]*customer.Transac
 		WHERE customer_id = $1
 		ORDER BY created_at DESC
 	`
-	rows, err := r.db.Query(query, customerID)
+	rows, err := r.dbpool.Query(context.Background(), query, customerID)
 	if err != nil {
 		return nil, err
 	}

@@ -5,7 +5,7 @@ services:
     build: .
     hostname: api01
     environment:
-      - DB_URL=postgres://postgres:password@db:5432/rinha?sslmode=disable
+      - DB_URL=postgres://postgres:password@db:5432/rinha?sslmode=disable&pool_min_conns=0&pool_max_conns=15
       - SERVER_PORT=:3000
     ports:
       - "3001:3000"
@@ -21,8 +21,6 @@ services:
   api02:
     <<: *api
     hostname: api02
-    environment:
-      DB_HOSTNAME: db
     ports:
       - "3002:3000"
 

@@ -3,6 +3,7 @@ package customer
 import (
 	"errors"
 	"strconv"
+	"time"
 )
 
 var (
@@ -36,16 +37,16 @@ type (
 	}
 
 	BalanceBankStatement struct {
-		Total int    `json:"total"`
-		Date  string `json:"data_extrato"`
-		Limit int    `json:"limite"`
+		Total int       `json:"total"`
+		Date  time.Time `json:"data_extrato"`
+		Limit int       `json:"limite"`
 	}
 
 	TransactionBankStatement struct {
-		Value       int    `json:"valor"`
-		Type        string `json:"tipo"`
-		Description string `json:"descricao"`
-		CreatedAt   string `json:"realizada_em"`
+		Value       int       `json:"valor"`
+		Type        string    `json:"tipo"`
+		Description string    `json:"descricao"`
+		CreatedAt   time.Time `json:"realizada_em"`
 	}
 
 	UseCase interface {
