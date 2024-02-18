@@ -1,0 +1,14 @@
+@baseUrl = http://localhost:9999
+
+### Make a transaction
+POST {{baseUrl}}/clientes/1/transacoes
+Content-Type: application/json
+
+{
+    "valor": 1000000,
+    "tipo" : "d",
+    "descricao" : "Foo Bar"
+}
+
+### Get account balance
+GET {{baseUrl}}/clientes/1/extrato
