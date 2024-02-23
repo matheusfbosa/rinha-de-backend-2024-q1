@@ -1,5 +1,7 @@
 package customer
 
+import "time"
+
 type Service struct {
 	r Repository
 }
@@ -11,32 +13,36 @@ func NewService(r Repository) *Service {
 }
 
 func (s *Service) MakeTransaction(tr *Transaction) (*AccountBalance, error) {
-	balance, err := s.r.GetAccountBalance(tr.CustomerID)
-	if err != nil {
-		return nil, err
+	limit, ok := CustomerAccountLimit[tr.CustomerID]
+	if !ok {
+		return nil, ErrCustomerNotFound
 	}
 
-	newTr, err := tr.withLastBalance(balance.Total, balance.Limit)
-	if err != nil {
-		return nil, err
-	}
-
-	err = s.r.CreateTransaction(newTr)
+	tr.AccountLimit = limit
+	balance, err := s.r.MakeTransaction(tr)
 	if err != nil {
 		return nil, err
 	}
 
 	return &AccountBalance{
-		Limit:   balance.Limit,
-		Balance: newTr.LastBalance,
+		Limit:   limit,
+		Balance: balance,
 	}, nil
 }
 
 func (s *Service) GetBankStatement(customerID string) (*BankStatement, error) {
+	limit, ok := CustomerAccountLimit[customerID]
+	if !ok {
+		return nil, ErrCustomerNotFound
+	}
+
 	statement, err := s.r.GetBankStatement(customerID)
 	if err != nil {
 		return nil, err
 	}
+
+	statement.Balance.Limit = limit
+	statement.Balance.Date = time.Now()
 
 	return statement, nil
 }

@@ -5,7 +5,7 @@ services:
     build: .
     hostname: api01
     environment:
-      - DB_URL=postgres://postgres:password@db:5432/rinha?sslmode=disable
+      - DB_URL=postgres://postgres:password@db:5432/rinha?pool_max_conns=6&pool_min_conns=6&pool_max_conn_lifetime=330s
       - SERVER_PORT=:3000
     ports:
       - "3001:3000"
@@ -15,14 +15,12 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.35"
-          memory: "150MB"
+          cpus: "0.2"
+          memory: "30MB"
 
   api02:
     <<: *api
     hostname: api02
-    environment:
-      DB_HOSTNAME: db
     ports:
       - "3002:3000"
 
@@ -38,7 +36,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.3"
+          cpus: "0.1"
           memory: "50MB"
 
   db:
@@ -57,13 +55,14 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.5"
-          memory: "200MB"
+          cpus: "1"
+          memory: "440MB"
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 10s
       timeout: 5s
       retries: 5
+    command: postgres -c 'config_file=/etc/postgresql/postgresql.conf'
 
 networks:
   default:

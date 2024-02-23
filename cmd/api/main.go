@@ -1,17 +1,18 @@
 package main
 
 import (
-	"database/sql"
+	"context"
+	"fmt"
 	"os"
 
-	_ "github.com/lib/pq"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/matheusfbosa/rinha-de-backend-2024-q1/customer"
 	"github.com/matheusfbosa/rinha-de-backend-2024-q1/customer/postgres"
 	"github.com/matheusfbosa/rinha-de-backend-2024-q1/internal/httpserver/fiber"
 )
 
 const (
-	defaultConnString = "postgres://postgres:password@db:5432/rinha?sslmode=disable"
+	defaultConnString = "postgres://postgres:password@localhost:5432/rinha?pool_max_conns=6&pool_min_conns=6&pool_max_conn_lifetime=330s"
 	defaultServerPort = ":3000"
 )
 
@@ -25,12 +26,18 @@ func main() {
 		serverPort = defaultServerPort
 	}
 
-	db, err := sql.Open("postgres", connString)
+	config, err := pgxpool.ParseConfig(connString)
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("failed to parse connection string: %s", err.Error()))
 	}
 
-	r := postgres.NewPostgreSQL(db)
+	dbpool, err := pgxpool.NewWithConfig(context.Background(), config)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create connection pool: %s", err.Error()))
+	}
+	defer dbpool.Close()
+
+	r := postgres.NewPostgreSQL(dbpool)
 	service := customer.NewService(r)
 
 	app := fiber.Handlers(service)
