@@ -1,120 +1,100 @@
 package postgres
 
 import (
-	"database/sql"
+	"context"
 
-	"github.com/lib/pq"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/matheusfbosa/rinha-de-backend-2024-q1/customer"
 )
 
 const foreignKeyViolationCode = "23503"
 
 type PostgreSQL struct {
-	db *sql.DB
+	dbpool *pgxpool.Pool
 }
 
-func NewPostgreSQL(db *sql.DB) *PostgreSQL {
+func NewPostgreSQL(dbpool *pgxpool.Pool) *PostgreSQL {
 	return &PostgreSQL{
-		db: db,
+		dbpool: dbpool,
 	}
 }
 
-func (r *PostgreSQL) CreateTransaction(tr *customer.Transaction) error {
+func (r *PostgreSQL) MakeTransaction(tr *customer.Transaction) (int, error) {
 	query := `
-		INSERT INTO transactions (
-			type,
-			value,
-			description,
-			customer_id,
-			last_balance
-		) VALUES ($1, $2, $3, $4, $5)
+		select make_transaction($1, $2, $3, $4, $5);
 	`
-	_, err := r.db.Exec(query,
+	var balance int
+	err := r.dbpool.QueryRow(context.Background(),
+		query,
+		tr.CustomerID,
 		tr.Type,
 		tr.Value,
 		tr.Description,
-		tr.CustomerID,
-		tr.LastBalance,
-	)
-	pqErr, isPQError := err.(*pq.Error)
-	if isPQError && pqErr.Code == foreignKeyViolationCode {
-		return customer.ErrCustomerNotFound
+		tr.AccountLimit,
+	).Scan(&balance)
+	if err != nil {
+		if isAccountLimitError(err) {
+			return 0, customer.ErrInsufficientFunds
+		}
+
+		return 0, err
 	}
 
-	return err
+	return balance, nil
 }
 
 func (r *PostgreSQL) GetBankStatement(customerID string) (*customer.BankStatement, error) {
-	balance, err := r.GetAccountBalance(customerID)
-	if err != nil {
-		return nil, err
-	}
-
-	lastTransactions, err := r.getLastTransactions(customerID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &customer.BankStatement{
-		Balance:          *balance,
-		LastTransactions: lastTransactions,
-	}, nil
-}
-
-func (r *PostgreSQL) GetAccountBalance(customerID string) (*customer.BalanceBankStatement, error) {
 	query := `
-		SELECT
-			COALESCE(t.last_balance, 0) AS last_balance,
-			c.account_limit,
-			NOW() AS date
-		FROM customers c
-		LEFT JOIN (
-			SELECT customer_id, last_balance
-			FROM transactions
-			WHERE customer_id = $1
-			ORDER BY created_at DESC
-			LIMIT 1
-		) t ON c.customer_id = t.customer_id
-		WHERE c.customer_id = $1 AND c.customer_id IS NOT NULL;
-	`
-	var ab customer.BalanceBankStatement
-	err := r.db.QueryRow(query, customerID).Scan(&ab.Total, &ab.Limit, &ab.Date)
-	if err == sql.ErrNoRows {
-		return nil, customer.ErrCustomerNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	return &ab, nil
-}
-
-func (r *PostgreSQL) getLastTransactions(customerID string) ([]*customer.TransactionBankStatement, error) {
-	query := `
-		SELECT
-			value,
+		select
+			last_balance,
 			type,
+			value,
 			description,
 			created_at
-		FROM transactions
-		WHERE customer_id = $1
-		ORDER BY created_at DESC
-	`
-	rows, err := r.db.Query(query, customerID)
+		from transactions
+		where customer_id = $1
+		order by created_at desc
+		limit 10
+    `
+	rows, err := r.dbpool.Query(context.Background(), query, customerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	transactions := make([]*customer.TransactionBankStatement, 0)
+	var idx int
+	var lastBalance int
+	var statement customer.BankStatement
+	statement.LastTransactions = make([]*customer.TransactionBankStatement, 0)
 	for rows.Next() {
 		var tr customer.TransactionBankStatement
-		err := rows.Scan(&tr.Value, &tr.Type, &tr.Description, &tr.CreatedAt)
+		err := rows.Scan(
+			&lastBalance,
+			&tr.Type,
+			&tr.Value,
+			&tr.Description,
+			&tr.CreatedAt,
+		)
 		if err != nil {
 			return nil, err
 		}
-		transactions = append(transactions, &tr)
+
+		if idx == 0 {
+			statement.Balance.Total = lastBalance
+		}
+
+		statement.LastTransactions = append(statement.LastTransactions, &tr)
+		idx++
 	}
 
-	return transactions, nil
+	err = rows.Err()
+	if err != nil {
+		return nil, err
+	}
+
+	return &statement, nil
+}
+
+func isAccountLimitError(err error) bool {
+	return err.Error() == "ERROR: insufficient funds (SQLSTATE P0001)"
 }

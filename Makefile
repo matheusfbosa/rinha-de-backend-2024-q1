@@ -18,3 +18,12 @@ docker-up:
 
 docker-down:
 	docker-compose down
+
+docker-build:
+	docker build -t rinha-de-backend-2024-q1-poc .
+
+docker-tag:
+	docker tag rinha-de-backend-2024-q1-poc matheusfbosa/rinha-de-backend-2024-q1-poc
+
+docker-push:
+	docker push matheusfbosa/rinha-de-backend-2024-q1-poc
