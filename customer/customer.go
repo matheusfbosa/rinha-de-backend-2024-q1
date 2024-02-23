@@ -10,6 +10,14 @@ var (
 	ErrInvalidTransaction = errors.New("invalid transaction")
 	ErrCustomerNotFound   = errors.New("customer not found")
 	ErrInsufficientFunds  = errors.New("insufficient funds")
+
+	CustomerAccountLimit = map[string]int{
+		"1": 100000,
+		"2": 80000,
+		"3": 1000000,
+		"4": 10000000,
+		"5": 500000,
+	}
 )
 
 const (
@@ -19,11 +27,11 @@ const (
 
 type (
 	Transaction struct {
-		CustomerID  string
-		Value       int    `json:"valor"`
-		Type        string `json:"tipo"`
-		Description string `json:"descricao"`
-		LastBalance int
+		Value        int    `json:"valor"`
+		Type         string `json:"tipo"`
+		Description  string `json:"descricao"`
+		CustomerID   string
+		AccountLimit int
 	}
 
 	AccountBalance struct {
@@ -55,8 +63,7 @@ type (
 	}
 
 	Repository interface {
-		CreateTransaction(tr *Transaction) error
-		GetAccountBalance(customerID string) (*BalanceBankStatement, error)
+		MakeTransaction(tr *Transaction) (int, error)
 		GetBankStatement(customerID string) (*BankStatement, error)
 	}
 )
@@ -71,22 +78,4 @@ func (tr *Transaction) Validate() error {
 	}
 
 	return nil
-}
-
-func (tr Transaction) withLastBalance(balance, limit int) (*Transaction, error) {
-	newTr := tr
-
-	switch tr.Type {
-	case CreditType:
-		newTr.LastBalance = balance + tr.Value
-	case DebitType:
-		if (balance - tr.Value) < -limit {
-			return nil, ErrInsufficientFunds
-		}
-		newTr.LastBalance = balance - tr.Value
-	default:
-		return nil, ErrInvalidTransaction
-	}
-
-	return &newTr, nil
 }

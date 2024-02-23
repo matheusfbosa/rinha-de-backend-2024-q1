@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	defaultConnString = "postgres://postgres:password@localhost:5432/rinha?sslmode=disable&pool_min_conns=0&pool_max_conns=15"
+	defaultConnString = "postgres://postgres:password@localhost:5432/rinha?pool_max_conns=6&pool_min_conns=6&pool_max_conn_lifetime=330s"
 	defaultServerPort = ":3000"
 )
 
@@ -26,10 +26,14 @@ func main() {
 		serverPort = defaultServerPort
 	}
 
-	dbpool, err := pgxpool.New(context.Background(), connString)
+	config, err := pgxpool.ParseConfig(connString)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "unable to create connection pool: %v\n", err)
-		os.Exit(1)
+		panic(fmt.Sprintf("failed to parse connection string: %s", err.Error()))
+	}
+
+	dbpool, err := pgxpool.NewWithConfig(context.Background(), config)
+	if err != nil {
+		panic(fmt.Sprintf("unable to create connection pool: %s", err.Error()))
 	}
 	defer dbpool.Close()
 
